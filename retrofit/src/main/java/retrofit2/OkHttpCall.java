@@ -30,8 +30,10 @@ import static retrofit2.Utils.checkNotNull;
 import static retrofit2.Utils.throwIfFatal;
 
 final class OkHttpCall<T> implements Call<T> {
-  private final ServiceMethod<T, ?> serviceMethod;
+  private final RequestFactory requestFactory;
   private final @Nullable Object[] args;
+  private final okhttp3.Call.Factory callFactory;
+  private final Converter<ResponseBody, T> responseConverter;
 
   private volatile boolean canceled;
 
@@ -42,14 +44,17 @@ final class OkHttpCall<T> implements Call<T> {
   @GuardedBy("this")
   private boolean executed;
 
-  OkHttpCall(ServiceMethod<T, ?> serviceMethod, @Nullable Object[] args) {
-    this.serviceMethod = serviceMethod;
+  OkHttpCall(RequestFactory requestFactory, @Nullable Object[] args,
+      okhttp3.Call.Factory callFactory, Converter<ResponseBody, T> responseConverter) {
+    this.requestFactory = requestFactory;
     this.args = args;
+    this.callFactory = callFactory;
+    this.responseConverter = responseConverter;
   }
 
   @SuppressWarnings("CloneDoesntCallSuperClone") // We are a final type & this saves clearing state.
   @Override public OkHttpCall<T> clone() {
-    return new OkHttpCall<>(serviceMethod, args);
+    return new OkHttpCall<>(requestFactory, args, callFactory, responseConverter);
   }
 
   @Override public synchronized Request request() {
@@ -110,16 +115,21 @@ final class OkHttpCall<T> implements Call<T> {
     }
 
     call.enqueue(new okhttp3.Callback() {
-      @Override public void onResponse(okhttp3.Call call, okhttp3.Response rawResponse)
-          throws IOException {
+      @Override public void onResponse(okhttp3.Call call, okhttp3.Response rawResponse) {
         Response<T> response;
         try {
           response = parseResponse(rawResponse);
         } catch (Throwable e) {
+          throwIfFatal(e);
           callFailure(e);
           return;
         }
-        callSuccess(response);
+
+        try {
+          callback.onResponse(OkHttpCall.this, response);
+        } catch (Throwable t) {
+          t.printStackTrace();
+        }
       }
 
       @Override public void onFailure(okhttp3.Call call, IOException e) {
@@ -129,14 +139,6 @@ final class OkHttpCall<T> implements Call<T> {
       private void callFailure(Throwable e) {
         try {
           callback.onFailure(OkHttpCall.this, e);
-        } catch (Throwable t) {
-          t.printStackTrace();
-        }
-      }
-
-      private void callSuccess(Response<T> response) {
-        try {
-          callback.onResponse(OkHttpCall.this, response);
         } catch (Throwable t) {
           t.printStackTrace();
         }
@@ -185,7 +187,7 @@ final class OkHttpCall<T> implements Call<T> {
   }
 
   private okhttp3.Call createRawCall() throws IOException {
-    okhttp3.Call call = serviceMethod.toCall(args);
+    okhttp3.Call call = callFactory.newCall(requestFactory.create(args));
     if (call == null) {
       throw new NullPointerException("Call.Factory returned null.");
     }
@@ -216,9 +218,9 @@ final class OkHttpCall<T> implements Call<T> {
       return Response.success(null, rawResponse);
     }
 
-    ExceptionCatchingRequestBody catchingBody = new ExceptionCatchingRequestBody(rawBody);
+    ExceptionCatchingResponseBody catchingBody = new ExceptionCatchingResponseBody(rawBody);
     try {
-      T body = serviceMethod.toResponse(catchingBody);
+      T body = responseConverter.convert(catchingBody);
       return Response.success(body, rawResponse);
     } catch (RuntimeException e) {
       // If the underlying source threw an exception, propagate that rather than indicating it was
@@ -271,11 +273,11 @@ final class OkHttpCall<T> implements Call<T> {
     }
   }
 
-  static final class ExceptionCatchingRequestBody extends ResponseBody {
+  static final class ExceptionCatchingResponseBody extends ResponseBody {
     private final ResponseBody delegate;
     IOException thrownException;
 
-    ExceptionCatchingRequestBody(ResponseBody delegate) {
+    ExceptionCatchingResponseBody(ResponseBody delegate) {
       this.delegate = delegate;
     }
 

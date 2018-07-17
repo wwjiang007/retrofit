@@ -566,7 +566,7 @@ public final class RetrofitTest {
 
     server.enqueue(new MockResponse().setBody("Hi"));
 
-    RequestBody body = RequestBody.create(MediaType.parse("text/plain"), "Hey");
+    RequestBody body = RequestBody.create(MediaType.get("text/plain"), "Hey");
     Response<ResponseBody> response = example.postRequestBody(body).execute();
     assertThat(response.body().string()).isEqualTo("Hi");
 
@@ -693,8 +693,7 @@ public final class RetrofitTest {
     try {
       new Retrofit.Builder().baseUrl("ftp://foo/bar");
       fail();
-    } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessage("Illegal URL: ftp://foo/bar");
+    } catch (IllegalArgumentException ignored) {
     }
   }
 
@@ -705,7 +704,7 @@ public final class RetrofitTest {
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessage("baseUrl must end in /: http://example.com/api");
     }
-    HttpUrl parsed = HttpUrl.parse("http://example.com/api");
+    HttpUrl parsed = HttpUrl.get("http://example.com/api");
     try {
       new Retrofit.Builder().baseUrl(parsed);
       fail();
@@ -719,11 +718,11 @@ public final class RetrofitTest {
         .baseUrl("http://example.com/")
         .build();
     HttpUrl baseUrl = retrofit.baseUrl();
-    assertThat(baseUrl).isEqualTo(HttpUrl.parse("http://example.com/"));
+    assertThat(baseUrl).isEqualTo(HttpUrl.get("http://example.com/"));
   }
 
   @Test public void baseHttpUrlPropagated() {
-    HttpUrl url = HttpUrl.parse("http://example.com/");
+    HttpUrl url = HttpUrl.get("http://example.com/");
     Retrofit retrofit = new Retrofit.Builder()
         .baseUrl(url)
         .build();
@@ -1024,7 +1023,7 @@ public final class RetrofitTest {
     Type type = Object.class;
     Annotation[] annotations = new Annotation[0];
 
-    Converter<?, String> expectedAdapter = mock(Converter.class);
+    Converter<?, String> expectedConverter = mock(Converter.class);
     Converter.Factory factory = mock(Converter.Factory.class);
 
     Retrofit retrofit = new Retrofit.Builder()
@@ -1032,10 +1031,10 @@ public final class RetrofitTest {
         .addConverterFactory(factory)
         .build();
 
-    doReturn(expectedAdapter).when(factory).stringConverter(type, annotations, retrofit);
+    doReturn(expectedConverter).when(factory).stringConverter(type, annotations, retrofit);
 
-    Converter<?, String> actualAdapter = retrofit.stringConverter(type, annotations);
-    assertThat(actualAdapter).isSameAs(expectedAdapter);
+    Converter<?, String> actualConverter = retrofit.stringConverter(type, annotations);
+    assertThat(actualConverter).isSameAs(expectedConverter);
 
     verify(factory).stringConverter(type, annotations, retrofit);
     verifyNoMoreInteractions(factory);

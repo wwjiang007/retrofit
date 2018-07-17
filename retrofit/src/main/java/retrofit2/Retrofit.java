@@ -58,7 +58,7 @@ import static retrofit2.Utils.checkNotNull;
  * @author Jake Wharton (jw@squareup.com)
  */
 public final class Retrofit {
-  private final Map<Method, ServiceMethod<?, ?>> serviceMethodCache = new ConcurrentHashMap<>();
+  private final Map<Method, ServiceMethod<?>> serviceMethodCache = new ConcurrentHashMap<>();
 
   final okhttp3.Call.Factory callFactory;
   final HttpUrl baseUrl;
@@ -143,10 +143,7 @@ public final class Retrofit {
             if (platform.isDefaultMethod(method)) {
               return platform.invokeDefaultMethod(method, service, proxy, args);
             }
-            ServiceMethod<Object, Object> serviceMethod =
-                (ServiceMethod<Object, Object>) loadServiceMethod(method);
-            OkHttpCall<Object> okHttpCall = new OkHttpCall<>(serviceMethod, args);
-            return serviceMethod.adapt(okHttpCall);
+            return loadServiceMethod(method).invoke(args);
           }
         });
   }
@@ -160,14 +157,14 @@ public final class Retrofit {
     }
   }
 
-  ServiceMethod<?, ?> loadServiceMethod(Method method) {
-    ServiceMethod<?, ?> result = serviceMethodCache.get(method);
+  ServiceMethod<?> loadServiceMethod(Method method) {
+    ServiceMethod<?> result = serviceMethodCache.get(method);
     if (result != null) return result;
 
     synchronized (serviceMethodCache) {
       result = serviceMethodCache.get(method);
       if (result == null) {
-        result = new ServiceMethod.Builder<>(this, method).build();
+        result = ServiceMethod.parseAnnotations(this, method);
         serviceMethodCache.put(method, result);
       }
     }
@@ -451,11 +448,7 @@ public final class Retrofit {
      */
     public Builder baseUrl(String baseUrl) {
       checkNotNull(baseUrl, "baseUrl == null");
-      HttpUrl httpUrl = HttpUrl.parse(baseUrl);
-      if (httpUrl == null) {
-        throw new IllegalArgumentException("Illegal URL: " + baseUrl);
-      }
-      return baseUrl(httpUrl);
+      return baseUrl(HttpUrl.get(baseUrl));
     }
 
     /**

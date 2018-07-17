@@ -6,6 +6,7 @@ A `Converter` which uses [JAXB][1] for serialization to and from XML.
 A default `JAXBContext` instance will be created or one can be configured and passed
 to `JaxbConverterFactory.create()` to further control the serialization.
 
+**Note that JAXB does not work on Android.**
 
 Download
 --------
@@ -20,7 +21,7 @@ Download [the latest JAR][2] or grab via [Maven][3]:
 ```
 or [Gradle][3]:
 ```groovy
-compile 'com.squareup.retrofit2:converter-jaxb:latest.version'
+implementation 'com.squareup.retrofit2:converter-jaxb:latest.version'
 ```
 
 Snapshots of the development version are available in [Sonatype's `snapshots` repository][snap].
